@@ -1,25 +1,25 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
-import httpx
+from flask import Flask, request, send_file
+from rembg import remove
+from PIL import Image
 import io
 
-app = FastAPI()
+app = Flask(__name__)
 
-PIXELCUT_API_URL = "https://api.pixelcut.ai/api/remove-background"
+@app.route('/remover-fundo', methods=['POST'])
+def remover_fundo():
+    if 'file' not in request.files:
+        return {'erro': 'Arquivo não enviado'}, 400
 
-@app.post("/remover-fundo/")
-async def remover_fundo(file: UploadFile = File(...)):
-    # Lê a imagem enviada
-    image_bytes = await file.read()
+    file = request.files['file']
+    input_image = file.read()
+    output_image = remove(input_image)
 
-    # Faz a requisição para a API da Pixelcut
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            PIXELCUT_API_URL,
-            files={"file": (file.filename, image_bytes, file.content_type)},
-        )
-        response.raise_for_status()
-        result = response.content
+    return send_file(
+        io.BytesIO(output_image),
+        mimetype='image/png',
+        as_attachment=False,
+        download_name='sem_fundo.png'
+    )
 
-    # Retorna a imagem final como PNG
-    return StreamingResponse(io.BytesIO(result), media_type="image/png")
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)
