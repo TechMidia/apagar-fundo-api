@@ -1,23 +1,23 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import StreamingResponse
-from backgroundremover import remove
 from PIL import Image
+from backgroundremover import remove
 import io
 
 app = FastAPI()
 
 @app.post("/remover-fundo/")
 async def remover_fundo(file: UploadFile = File(...)):
-    # Lê a imagem enviada
+    # Lê o arquivo enviado
     image = Image.open(io.BytesIO(await file.read()))
 
-    # Remove o fundo
+    # Remove o fundo da imagem
     result = remove(image)
 
-    # Prepara buffer de resposta
+    # Salva a imagem em um buffer
     buf = io.BytesIO()
     result.save(buf, format="PNG")
     buf.seek(0)
 
-    # Retorna a imagem já processada
+    # Retorna como uma resposta de streaming (imagem diretamente)
     return StreamingResponse(buf, media_type="image/png")
