@@ -1,23 +1,25 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
-from PIL import Image
-from backgroundremover import remove
+import httpx
 import io
 
 app = FastAPI()
 
+PIXELCUT_API_URL = "https://api.pixelcut.ai/api/remove-background"
+
 @app.post("/remover-fundo/")
 async def remover_fundo(file: UploadFile = File(...)):
-    # Lê o arquivo enviado
-    image = Image.open(io.BytesIO(await file.read()))
+    # Lê a imagem enviada
+    image_bytes = await file.read()
 
-    # Remove o fundo da imagem
-    result = remove(image)
+    # Faz a requisição para a API da Pixelcut
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            PIXELCUT_API_URL,
+            files={"file": (file.filename, image_bytes, file.content_type)},
+        )
+        response.raise_for_status()
+        result = response.content
 
-    # Salva a imagem em um buffer
-    buf = io.BytesIO()
-    result.save(buf, format="PNG")
-    buf.seek(0)
-
-    # Retorna como uma resposta de streaming (imagem diretamente)
-    return StreamingResponse(buf, media_type="image/png")
+    # Retorna a imagem final como PNG
+    return StreamingResponse(io.BytesIO(result), media_type="image/png")
