@@ -1,5 +1,3 @@
-fastapi
-uvicorn
-Pillow
-python-multipart
-requests
+flask
+rembg
+pillow
