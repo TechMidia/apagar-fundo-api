@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 Pillow
-backgroundremover
 python-multipart
+git+https://github.com/nadermx/backgroundremover.git
