@@ -33,39 +33,16 @@ def home():
 @app.route('/remover-fundo', methods=['POST'])
 def remover_fundo():
     if 'file' not in request.files or 'nome' not in request.form:
-        return {'error': 'Imagem e nome do produto são obrigatórios'}, 400
+        return jsonify({'error': 'Imagem e nome do produto são obrigatórios'}), 400
 
     image = request.files['file']
     nome_produto = request.form['nome']
-    api_key = os.environ.get('DEZGO_API_KEY')
 
-    if not api_key:
-        return {'error': 'Chave da API não configurada'}, 500
-
-    response = requests.post(
-        'https://api.dezgo.com/remove-background',
-        headers={'X-Dezgo-Key': api_key},
-        files={'image': image.read()}
-    )
-
-    if response.status_code != 200:
-        return {'error': 'Erro na API Dezgo', 'status': response.status_code}, 500
-
-    nome_arquivo = f'imagem_sem_fundo_{datetime.now().timestamp()}.png'
-    with open(nome_arquivo, 'wb') as f:
-        f.write(response.content)
-
-    s3.upload_file(nome_arquivo, AWS_S3_BUCKET, nome_arquivo)
-    s3_url = f'https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{nome_arquivo}'
-
-    produto = {
-        'nome': nome_produto,
-        'imagem_fundo_removido_url': s3_url,
-        'criado_em': datetime.now()
-    }
-    colecao_produtos.insert_one(produto)
-
-    return send_file(nome_arquivo, mimetype='image/png')
+    return jsonify({
+        'mensagem': 'Recebido com sucesso',
+        'nome_produto': nome_produto,
+        'nome_arquivo': image.filename
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
