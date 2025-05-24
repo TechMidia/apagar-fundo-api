@@ -1,38 +1,34 @@
-import os
-import requests
 from flask import Flask, request, send_file
-from dotenv import load_dotenv
-from io import BytesIO
-
-load_dotenv()
+import requests
+import os
 
 app = Flask(__name__)
 
-DEZGO_API_KEY = os.getenv("DEZGO_API_KEY")
+@app.route('/')
+def home():
+    return 'API de Remoção de Fundo ativa!'
 
-@app.route("/remover-fundo", methods=["POST"])
+@app.route('/remover-fundo', methods=['POST'])
 def remover_fundo():
-    if "file" not in request.files:
-        return {"erro": "Arquivo não enviado"}, 400
+    if 'file' not in request.files:
+        return {'error': 'Nenhuma imagem enviada'}, 400
 
-    imagem = request.files["file"]
+    image = request.files['file']
+    api_key = os.environ.get('DEZGO_API_KEY')
 
-    headers = {
-        "Authorization": f"Bearer {DEZGO_API_KEY}"
-    }
+    if not api_key:
+        return {'error': 'Chave da API não configurada'}, 500
 
-    files = {
-        "image": (imagem.filename, imagem.stream, imagem.mimetype)
-    }
-
-    url = "https://api.dezgo.com/background-removal"
-
-    response = requests.post(url, headers=headers, files=files)
+    response = requests.post(
+        'https://api.dezgo.com/remove-background',
+        headers={'X-Dezgo-Key': api_key},
+        files={'image': image.read()}
+    )
 
     if response.status_code != 200:
-        return {"erro": "Erro ao remover fundo", "detalhes": response.text}, 500
+        return {'error': 'Erro na API Dezgo', 'status': response.status_code}, 500
 
-    return send_file(BytesIO(response.content), mimetype="image/png")
+    with open('imagem_sem_fundo.png', 'wb') as f:
+        f.write(response.content)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    return send_file('imagem_sem_fundo.png', mimetype='image/png')
