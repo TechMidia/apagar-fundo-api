@@ -1,25 +1,38 @@
+import os
+import requests
 from flask import Flask, request, send_file
-from rembg import remove
-from PIL import Image
-import io
+from dotenv import load_dotenv
+from io import BytesIO
+
+load_dotenv()
 
 app = Flask(__name__)
 
-@app.route('/remover-fundo', methods=['POST'])
+DEZGO_API_KEY = os.getenv("DEZGO_API_KEY")
+
+@app.route("/remover-fundo", methods=["POST"])
 def remover_fundo():
-    if 'file' not in request.files:
-        return {'erro': 'Arquivo não enviado'}, 400
+    if "file" not in request.files:
+        return {"erro": "Arquivo não enviado"}, 400
 
-    file = request.files['file']
-    input_image = file.read()
-    output_image = remove(input_image)
+    imagem = request.files["file"]
 
-    return send_file(
-        io.BytesIO(output_image),
-        mimetype='image/png',
-        as_attachment=False,
-        download_name='sem_fundo.png'
-    )
+    headers = {
+        "Authorization": f"Bearer {DEZGO_API_KEY}"
+    }
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+    files = {
+        "image": (imagem.filename, imagem.stream, imagem.mimetype)
+    }
+
+    url = "https://api.dezgo.com/background-removal"
+
+    response = requests.post(url, headers=headers, files=files)
+
+    if response.status_code != 200:
+        return {"erro": "Erro ao remover fundo", "detalhes": response.text}, 500
+
+    return send_file(BytesIO(response.content), mimetype="image/png")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
