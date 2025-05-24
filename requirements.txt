@@ -1,6 +1,3 @@
 flask
-rembg
-pillow
-onnxruntime
-numpy
-scikit-image
+requests
+python-dotenv
