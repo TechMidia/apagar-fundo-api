@@ -1,8 +1,10 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 import requests
 import os
 from datetime import datetime
 from pymongo import MongoClient
+import boto3
+from botocore.exceptions import NoCredentialsError
 
 app = Flask(__name__)
 
@@ -11,6 +13,25 @@ MONGO_URI = os.environ.get('MONGO_URI')
 client = MongoClient(MONGO_URI)
 db = client['encartes']  # nome do banco
 colecao_produtos = db['produtos_imagem']  # nome da coleção
+
+# Função para upload no Amazon S3
+def upload_para_s3(caminho_arquivo, nome_arquivo_s3):
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+        region_name=os.environ.get('AWS_REGION')
+    )
+    bucket = os.environ.get('AWS_S3_BUCKET')
+    try:
+        s3.upload_file(caminho_arquivo, bucket, nome_arquivo_s3)
+        url = f"https://{bucket}.s3.{os.environ.get('AWS_REGION')}.amazonaws.com/{nome_arquivo_s3}"
+        return url
+    except FileNotFoundError:
+        print("Arquivo não encontrado.")
+    except NoCredentialsError:
+        print("Credenciais não encontradas.")
+    return None
 
 @app.route('/')
 def home():
@@ -43,19 +64,26 @@ def remover_fundo():
     with open(nome_arquivo, 'wb') as f:
         f.write(response.content)
 
+    # Envia para o S3
+    nome_arquivo_s3 = f'produtos/{nome_arquivo}'
+    url_imagem_s3 = upload_para_s3(nome_arquivo, nome_arquivo_s3)
+
+    if not url_imagem_s3:
+        return {'error': 'Falha ao enviar para o S3'}, 500
+
     # Salva no MongoDB
     produto = {
         'nome': nome_produto,
         'tipo': 'desconhecido',
         'imagem_url': 'imagem_original_nao_salva',
-        'imagem_fundo_removido_url': nome_arquivo,
+        'imagem_fundo_removido_url': url_imagem_s3,
         'origem': 'upload',
         'criado_em': datetime.now()
     }
 
     colecao_produtos.insert_one(produto)
 
-    return send_file(nome_arquivo, mimetype='image/png')
+    return jsonify({'imagem_url': url_imagem_s3})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
