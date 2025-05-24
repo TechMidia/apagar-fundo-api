@@ -4,11 +4,15 @@ from datetime import datetime
 from pymongo import MongoClient
 import boto3
 import requests
+import tempfile
 
 app = Flask(__name__)
 
 # MongoDB
 MONGO_URI = os.environ.get('MONGO_URI')
+if not MONGO_URI:
+    raise Exception('Variável de ambiente MONGO_URI não definida')
+
 client = MongoClient(MONGO_URI)
 db = client['encartes']
 colecao_produtos = db['produtos_imagem']
@@ -32,42 +36,45 @@ def home():
 @app.route('/remover-fundo', methods=['POST'])
 def remover_fundo():
     if 'file' not in request.files or 'nome' not in request.form:
-        return {'error': 'Imagem e nome do produto são obrigatórios'}, 400
+        return jsonify({'error': 'Imagem e nome do produto são obrigatórios'}), 400
 
     image = request.files['file']
     nome_produto = request.form['nome']
     api_key = os.environ.get('DEZGO_API_KEY')
 
     if not api_key:
-        return {'error': 'Chave da API não configurada'}, 500
+        return jsonify({'error': 'Chave da API Dezgo não configurada'}), 500
 
-    response = requests.post(
-        'https://api.dezgo.com/remove-background',
-        headers={'X-Dezgo-Key': api_key},
-        files={'image': image.read()}
-    )
+    try:
+        response = requests.post(
+            'https://api.dezgo.com/remove-background',
+            headers={'X-Dezgo-Key': api_key},
+            files={'image': image.read()}
+        )
+        if response.status_code != 200:
+            return jsonify({'error': 'Erro na API Dezgo', 'status': response.status_code}), 500
 
-    if response.status_code != 200:
-        return {'error': 'Erro na API Dezgo', 'status': response.status_code}, 500
+        # Cria arquivo temporário
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
+            temp_file.write(response.content)
+            temp_file_path = temp_file.name
+            temp_filename = os.path.basename(temp_file_path)
 
-    # Salva imagem local
-    nome_arquivo = f'imagem_sem_fundo_{datetime.now().timestamp()}.png'
-    with open(nome_arquivo, 'wb') as f:
-        f.write(response.content)
+        # Envia para S3
+        s3.upload_file(temp_file_path, AWS_S3_BUCKET, temp_filename)
+        s3_url = f'https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{temp_filename}'
 
-    # Envia para o S3
-    s3.upload_file(nome_arquivo, AWS_S3_BUCKET, nome_arquivo)
-    s3_url = f'https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{nome_arquivo}'
+        # Salva no MongoDB
+        colecao_produtos.insert_one({
+            'nome': nome_produto,
+            'imagem_fundo_removido_url': s3_url,
+            'criado_em': datetime.now()
+        })
 
-    # Salva no MongoDB
-    produto = {
-        'nome': nome_produto,
-        'imagem_fundo_removido_url': s3_url,
-        'criado_em': datetime.now()
-    }
-    colecao_produtos.insert_one(produto)
+        return send_file(temp_file_path, mimetype='image/png')
 
-    return send_file(nome_arquivo, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
