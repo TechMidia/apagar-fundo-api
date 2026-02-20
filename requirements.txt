@@ -1,6 +1,5 @@
 flask
 requests
 python-dotenv
-pymongo
-dnspython
 boto3
+supabase
