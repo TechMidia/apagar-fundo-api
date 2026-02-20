@@ -1,11 +1,18 @@
 import os
-from pymongo import MongoClient
+from functools import lru_cache
 
-MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
+from supabase import Client, create_client
 
-# Nome do banco (você pode trocar para outro se quiser)
-db = client['encartes']
 
-# Coleção onde vamos salvar os produtos
-colecao_produtos = db['produtos_imagem']
+@lru_cache(maxsize=1)
+def get_supabase_client() -> Client:
+    """Cria um cliente Supabase único para reutilização na API."""
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+
+    if not supabase_url or not supabase_key:
+        raise RuntimeError(
+            "As variáveis SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_ANON_KEY) são obrigatórias."
+        )
+
+    return create_client(supabase_url, supabase_key)
